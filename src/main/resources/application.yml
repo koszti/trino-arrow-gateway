@@ -1,0 +1,16 @@
+server:
+  port: 8081
+
+gateway:
+  trino:
+    base-url: http://localhost:8080
+    user: trino-arrow-gateway
+
+  spool:
+    s3:
+      bucket: my-dev-spool-bucket
+      prefix: trino/results/
+      region: eu-central-1
+
+  conversion:
+    parallelism: 8

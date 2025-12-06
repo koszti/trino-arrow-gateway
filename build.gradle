@@ -1,0 +1,73 @@
+plugins {
+	id 'java'
+	id 'org.springframework.boot' version '3.5.8'
+	id 'io.spring.dependency-management' version '1.1.7'
+}
+
+group = 'com.wise.streamprocessing'
+version = '0.0.1-SNAPSHOT'
+description = 'trino-arrow-gateway'
+
+java {
+	toolchain {
+		languageVersion = JavaLanguageVersion.of(25)
+	}
+}
+
+repositories {
+	mavenCentral()
+}
+
+ext {
+	httpClient5Version = "5.5.1"
+	arrowVersion = "18.3.0"
+	jacksonCoreVersion = "2.20.1"
+	awsSdkVersion = "2.40.1"
+}
+
+dependencies {
+
+	implementation 'org.apache.httpcomponents.client5:httpclient5:$httpClient5Version'
+
+	implementation 'org.springframework.boot:spring-boot-starter'
+	implementation 'org.springframework.boot:spring-boot-starter-web'
+	implementation 'org.springframework.boot:spring-boot-starter-actuator'
+
+	// --- Spring REST client (Spring 6) ---
+	implementation 'org.springframework:spring-web'
+	implementation 'org.springframework.boot:spring-boot-starter-webflux' // provides WebClient & RestClient support
+
+	// --- Apache HttpComponents 5 (as underlying engine for RestClient) ---
+	implementation "org.apache.httpcomponents.client5:httpclient5:$httpClient5Version"
+
+	// --- Apache Arrow / Arrow Flight ---
+	implementation "org.apache.arrow:arrow-vector:$arrowVersion"
+	implementation "org.apache.arrow:arrow-memory-core:$arrowVersion"
+	implementation "org.apache.arrow:arrow-format:$arrowVersion"
+	implementation "org.apache.arrow:flight-core:$arrowVersion"
+
+	// --- Jackson streaming parser ---
+	implementation "com.fasterxml.jackson.core:jackson-core:$jacksonCoreVersion"
+
+	// --- AWS S3 async client (high-perf for spooled JSON files) ---
+	implementation platform("software.amazon.awssdk:bom:$awsSdkVersion")
+	implementation "software.amazon.awssdk:s3"
+
+	testImplementation 'org.springframework.boot:spring-boot-starter-test'
+	testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
+
+	annotationProcessor "org.springframework.boot:spring-boot-configuration-processor"
+}
+
+tasks.named('bootRun') {
+	jvmArgs += [
+		'--add-opens=java.base/java.nio=org.apache.arrow.memory.core,ALL-UNNAMED'
+	]
+}
+
+tasks.named('test') {
+	useJUnitPlatform()
+	jvmArgs += [
+		'--add-opens=java.base/java.nio=org.apache.arrow.memory.core,ALL-UNNAMED'
+	]
+}
