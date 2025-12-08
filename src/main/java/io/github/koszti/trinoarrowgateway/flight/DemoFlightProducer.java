@@ -1,10 +1,12 @@
 package io.github.koszti.trinoarrowgateway.flight;
 
+import io.github.koszti.trinoarrowgateway.config.GatewayTrinoProperties;
 import io.github.koszti.trinoarrowgateway.convert.JsonToArrowConverter;
 import io.github.koszti.trinoarrowgateway.spool.ParallelSpoolJsonArrowReader;
 import io.github.koszti.trinoarrowgateway.trino.QueryRegistry;
 import io.github.koszti.trinoarrowgateway.trino.TrinoClient;
 import io.github.koszti.trinoarrowgateway.trino.TrinoQueryHandle;
+import org.apache.arrow.flight.CallStatus;
 import org.apache.arrow.flight.FlightDescriptor;
 import org.apache.arrow.flight.FlightEndpoint;
 import org.apache.arrow.flight.FlightInfo;
@@ -13,9 +15,6 @@ import org.apache.arrow.flight.Location;
 import org.apache.arrow.flight.NoOpFlightProducer;
 import org.apache.arrow.flight.Ticket;
 import org.apache.arrow.memory.BufferAllocator;
-import org.apache.arrow.vector.types.pojo.ArrowType;
-import org.apache.arrow.vector.types.pojo.Field;
-import org.apache.arrow.vector.types.pojo.FieldType;
 import org.apache.arrow.vector.types.pojo.Schema;
 import org.apache.arrow.vector.VectorLoader;
 import org.apache.arrow.vector.VectorSchemaRoot;
@@ -26,7 +25,6 @@ import org.springframework.stereotype.Component;
 
 import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
-import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
 
@@ -52,18 +50,21 @@ public class DemoFlightProducer extends NoOpFlightProducer {
     private final JsonToArrowConverter fallbackConverter;
     private final TrinoClient trinoClient;
     private final QueryRegistry queryRegistry;
+    private final GatewayTrinoProperties trinoProps;
 
     public DemoFlightProducer(BufferAllocator allocator,
             ParallelSpoolJsonArrowReader spoolReader,
             JsonToArrowConverter fallbackConverter,
             TrinoClient trinoClient,
-            QueryRegistry queryRegistry) {
+            QueryRegistry queryRegistry,
+            GatewayTrinoProperties trinoProps) {
         this.allocator = allocator;
         this.location = Location.forGrpcInsecure("0.0.0.0", 31337);
         this.spoolReader = spoolReader;
         this.fallbackConverter = fallbackConverter;
         this.trinoClient = trinoClient;
         this.queryRegistry = queryRegistry;
+        this.trinoProps = trinoProps;
     }
 
     @Override
@@ -77,8 +78,16 @@ public class DemoFlightProducer extends NoOpFlightProducer {
         String sql = new String(cmd, StandardCharsets.UTF_8);
         log.info("getFlightInfo: received SQL: {}", sql);
 
-        // Submit query to Trino
-        TrinoQueryHandle handle = trinoClient.submitQuery(sql);
+        TrinoQueryHandle handle;
+        try {
+            handle = trinoClient.submitQuery(sql);
+        } catch (Exception e) {
+            String msg = String.format(
+                    "Trino is unavailable at %s. Start Trino or update gateway.trino.base-url.",
+                    trinoProps.getBaseUrl());
+            log.warn("Unable to submit query to Trino for Flight request: {}", msg, e);
+            throw CallStatus.UNAVAILABLE.withDescription(msg).withCause(e).toRuntimeException();
+        }
         queryRegistry.register(handle);
 
         Schema schema = handle.getArrowSchema();
