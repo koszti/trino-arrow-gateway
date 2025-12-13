@@ -89,4 +89,37 @@ class TrinoFlightProducerErrorPropagationTest {
             }
         }
     }
+
+    @Test
+    void getFlightInfo_returnsInvalidArgumentWhenSchemaCannotBeMapped() {
+        TrinoClient trinoClient = sql -> {
+            throw new IllegalArgumentException("Unsupported Trino type for now: date (column orderdate)");
+        };
+
+        try (RootAllocator allocator = new RootAllocator()) {
+            var executor = Executors.newSingleThreadExecutor();
+            try {
+                TrinoFlightProducer producer = new TrinoFlightProducer(
+                        allocator,
+                        trinoClient,
+                        new InMemoryQueryRegistry(),
+                        new GatewayTrinoProperties(),
+                        new GatewayFlightProperties(),
+                        new HttpSpooledSegmentClient(),
+                        new SpooledRowsToArrowConverter(allocator),
+                        executor,
+                        new GatewayConversionProperties()
+                );
+
+                FlightRuntimeException e = assertThrows(FlightRuntimeException.class, () ->
+                        producer.getFlightInfo(null, FlightDescriptor.command("SELECT *".getBytes(StandardCharsets.UTF_8))));
+
+                assertEquals(FlightStatusCode.INVALID_ARGUMENT, e.status().code());
+                assertTrue(e.getMessage().contains("Unsupported query result schema"));
+                assertTrue(e.getMessage().contains("orderdate"));
+            } finally {
+                executor.shutdownNow();
+            }
+        }
+    }
 }

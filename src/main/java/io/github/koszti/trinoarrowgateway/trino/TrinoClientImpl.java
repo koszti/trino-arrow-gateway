@@ -5,6 +5,7 @@ import io.github.koszti.trinoarrowgateway.trino.dto.TrinoStatementResponse;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.apache.arrow.vector.types.FloatingPointPrecision;
+import org.apache.arrow.vector.types.DateUnit;
 import org.apache.arrow.vector.types.pojo.ArrowType;
 import org.apache.arrow.vector.types.pojo.Field;
 import org.apache.arrow.vector.types.pojo.FieldType;
@@ -249,6 +250,8 @@ public class TrinoClientImpl implements TrinoClient
             return new Field(name, FieldType.nullable(new ArrowType.Utf8()), null);
         } else if (t.startsWith("BOOLEAN")) {
             return new Field(name, FieldType.nullable(new ArrowType.Bool()), null);
+        } else if (t.startsWith("DATE")) {
+            return new Field(name, FieldType.nullable(new ArrowType.Date(DateUnit.DAY)), null);
         }
 
         throw new IllegalArgumentException("Unsupported Trino type for now: " + trinoType + " (column " + name + ")");

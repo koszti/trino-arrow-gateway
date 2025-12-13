@@ -154,6 +154,10 @@ public class TrinoFlightProducer extends NoOpFlightProducer {
             String msg = "Trino query failed (queryId=" + e.getQueryId() + "): " + e.getMessage();
             log.info("Flight SQL failed: {}", msg);
             throw CallStatus.INVALID_ARGUMENT.withDescription(msg).withCause(e).toRuntimeException();
+        } catch (IllegalArgumentException e) {
+            String msg = "Unsupported query result schema: " + e.getMessage();
+            log.info("Flight SQL schema unsupported: {}", msg);
+            throw CallStatus.INVALID_ARGUMENT.withDescription(msg).withCause(e).toRuntimeException();
         } catch (TrinoUnavailableException e) {
             String msg = String.format(
                     "Trino is unavailable at %s. Start Trino or update gateway.trino.base-url.",

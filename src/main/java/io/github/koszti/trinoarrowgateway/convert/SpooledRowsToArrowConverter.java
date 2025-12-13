@@ -15,6 +15,7 @@ import org.apache.arrow.vector.types.pojo.Schema;
 import java.io.IOException;
 import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
+import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
@@ -151,6 +152,11 @@ public class SpooledRowsToArrowConverter {
                 case Bool -> {
                     boolean b = parser.getBooleanValue();
                     ((org.apache.arrow.vector.BitVector) vector).setSafe(rowIndex, b ? 1 : 0);
+                }
+                case Date -> {
+                    String s = parser.getValueAsString();
+                    long days = LocalDate.parse(s).toEpochDay();
+                    ((org.apache.arrow.vector.DateDayVector) vector).setSafe(rowIndex, (int) days);
                 }
                 default -> throw new IOException("Unsupported Arrow type " + type + " for field " + field.getName());
             }
