@@ -60,10 +60,15 @@ public class TrinoClientImpl implements TrinoClient
             request = request.header("X-Trino-Query-Data-Encoding", queryDataEncoding);
         }
 
-        TrinoStatementResponse response = request
-                .body(sql)
-                .retrieve()
-                .body(TrinoStatementResponse.class);
+        TrinoStatementResponse response;
+        try {
+            response = request
+                    .body(sql)
+                    .retrieve()
+                    .body(TrinoStatementResponse.class);
+        } catch (Exception e) {
+            throw new TrinoUnavailableException(trinoProps.getBaseUrl(), e);
+        }
 
         if (response == null || response.getId() == null) {
             throw new IllegalStateException("Trino /v1/statement returned no id");
@@ -81,7 +86,7 @@ public class TrinoClientImpl implements TrinoClient
         while (state != null && !"FINISHED".equalsIgnoreCase(state)) {
             if ("FAILED".equalsIgnoreCase(state) || "CANCELED".equalsIgnoreCase(state)) {
                 String msg = response.getError() != null ? response.getError().getMessage() : "(no error message)";
-                throw new IllegalStateException("Trino query " + queryId + " is in state " + state + ": " + msg);
+                throw new TrinoQueryFailedException(queryId, state, msg);
             }
 
             String nextUri = response.getNextUri();
@@ -102,7 +107,7 @@ public class TrinoClientImpl implements TrinoClient
                         .retrieve()
                         .body(TrinoStatementResponse.class);
             } catch (Exception e) {
-                throw new IllegalStateException("Error polling Trino nextUri for query " + queryId, e);
+                throw new TrinoUnavailableException(trinoProps.getBaseUrl(), e);
             }
 
             if (response == null) {

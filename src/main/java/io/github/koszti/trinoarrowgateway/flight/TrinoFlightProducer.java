@@ -7,7 +7,9 @@ import io.github.koszti.trinoarrowgateway.convert.SpooledRowsToArrowConverter;
 import io.github.koszti.trinoarrowgateway.spool.HttpSpooledSegmentClient;
 import io.github.koszti.trinoarrowgateway.trino.QueryRegistry;
 import io.github.koszti.trinoarrowgateway.trino.TrinoClient;
+import io.github.koszti.trinoarrowgateway.trino.TrinoQueryFailedException;
 import io.github.koszti.trinoarrowgateway.trino.TrinoQueryHandle;
+import io.github.koszti.trinoarrowgateway.trino.TrinoUnavailableException;
 import com.github.luben.zstd.ZstdInputStream;
 import org.apache.arrow.flight.CallStatus;
 import org.apache.arrow.flight.FlightDescriptor;
@@ -148,12 +150,20 @@ public class TrinoFlightProducer extends NoOpFlightProducer {
         TrinoQueryHandle handle;
         try {
             handle = trinoClient.submitQuery(sql);
-        } catch (Exception e) {
+        } catch (TrinoQueryFailedException e) {
+            String msg = "Trino query failed (queryId=" + e.getQueryId() + "): " + e.getMessage();
+            log.info("Flight SQL failed: {}", msg);
+            throw CallStatus.INVALID_ARGUMENT.withDescription(msg).withCause(e).toRuntimeException();
+        } catch (TrinoUnavailableException e) {
             String msg = String.format(
                     "Trino is unavailable at %s. Start Trino or update gateway.trino.base-url.",
-                    trinoProps.getBaseUrl());
+                    e.getBaseUrl());
             log.warn("Unable to submit query to Trino for Flight request: {}", msg, e);
             throw CallStatus.UNAVAILABLE.withDescription(msg).withCause(e).toRuntimeException();
+        } catch (Exception e) {
+            String msg = "Unexpected error while submitting query to Trino: " + e.getMessage();
+            log.warn(msg, e);
+            throw CallStatus.INTERNAL.withDescription(msg).withCause(e).toRuntimeException();
         }
         queryRegistry.register(handle);
 
