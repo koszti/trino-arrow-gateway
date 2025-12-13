@@ -1,7 +1,7 @@
 package io.github.koszti.trinoarrowgateway;
 
 import io.github.koszti.trinoarrowgateway.config.GatewayConversionProperties;
-import io.github.koszti.trinoarrowgateway.config.GatewaySpoolS3Properties;
+import io.github.koszti.trinoarrowgateway.config.GatewayFlightProperties;
 import io.github.koszti.trinoarrowgateway.config.GatewayTrinoProperties;
 
 import org.springframework.boot.SpringApplication;
@@ -11,7 +11,7 @@ import org.springframework.boot.context.properties.EnableConfigurationProperties
 @SpringBootApplication
 @EnableConfigurationProperties({
 		GatewayTrinoProperties.class,
-		GatewaySpoolS3Properties.class,
+		GatewayFlightProperties.class,
 		GatewayConversionProperties.class
 })
 public class TrinoArrowGatewayApplication {

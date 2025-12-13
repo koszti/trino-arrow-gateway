@@ -1,5 +1,7 @@
 package io.github.koszti.trinoarrowgateway.trino.dto;
 
+import com.fasterxml.jackson.databind.JsonNode;
+
 import java.util.List;
 
 /**
@@ -13,6 +15,14 @@ public class TrinoStatementResponse
     private String nextUri;
     private Stats stats;
     private TrinoError error;
+    /**
+     * Trino's "data" field is polymorphic:
+     * - When results are inlined, it's typically an array-of-arrays (rows).
+     * - When results are spooled, it's an object (encoding + segments).
+     *
+     * We keep it as JsonNode and interpret it where needed.
+     */
+    private JsonNode data;
 
     public String getId() {
         return id;
@@ -54,6 +64,14 @@ public class TrinoStatementResponse
         this.error = error;
     }
 
+    public JsonNode getData() {
+        return data;
+    }
+
+    public void setData(JsonNode data) {
+        this.data = data;
+    }
+
     public static class Column {
         private String name;
         private String type;
@@ -72,6 +90,108 @@ public class TrinoStatementResponse
 
         public void setType(String type) {
             this.type = type;
+        }
+    }
+
+    /**
+     * Result payload, including spooled segments (when Trino uses spooling).
+     */
+    public static class Data {
+        private String encoding; // e.g. "json+zstd"
+        private List<Segment> segments;
+
+        public String getEncoding() {
+            return encoding;
+        }
+
+        public void setEncoding(String encoding) {
+            this.encoding = encoding;
+        }
+
+        public List<Segment> getSegments() {
+            return segments;
+        }
+
+        public void setSegments(List<Segment> segments) {
+            this.segments = segments;
+        }
+    }
+
+    public static class Segment {
+        private String type;   // e.g. "spooled"
+        private String uri;    // download URI (http(s)://...)
+        private String ackUri; // ack URI (http(s)://...)
+        private SegmentMetadata metadata;
+
+        public String getType() {
+            return type;
+        }
+
+        public void setType(String type) {
+            this.type = type;
+        }
+
+        public String getUri() {
+            return uri;
+        }
+
+        public void setUri(String uri) {
+            this.uri = uri;
+        }
+
+        public String getAckUri() {
+            return ackUri;
+        }
+
+        public void setAckUri(String ackUri) {
+            this.ackUri = ackUri;
+        }
+
+        public SegmentMetadata getMetadata() {
+            return metadata;
+        }
+
+        public void setMetadata(SegmentMetadata metadata) {
+            this.metadata = metadata;
+        }
+    }
+
+    public static class SegmentMetadata {
+        private Long segmentSize;
+        private Long rowsCount;
+        private String expiresAt;
+        private Long rowOffset;
+
+        public Long getSegmentSize() {
+            return segmentSize;
+        }
+
+        public void setSegmentSize(Long segmentSize) {
+            this.segmentSize = segmentSize;
+        }
+
+        public Long getRowsCount() {
+            return rowsCount;
+        }
+
+        public void setRowsCount(Long rowsCount) {
+            this.rowsCount = rowsCount;
+        }
+
+        public String getExpiresAt() {
+            return expiresAt;
+        }
+
+        public void setExpiresAt(String expiresAt) {
+            this.expiresAt = expiresAt;
+        }
+
+        public Long getRowOffset() {
+            return rowOffset;
+        }
+
+        public void setRowOffset(Long rowOffset) {
+            this.rowOffset = rowOffset;
         }
     }
 

@@ -22,7 +22,6 @@ ext {
 	httpClient5Version = "5.5.1"
 	arrowVersion = "18.3.0"
 	jacksonCoreVersion = "2.20.1"
-	awsSdkVersion = "2.40.1"
 }
 
 dependencies {
@@ -49,9 +48,8 @@ dependencies {
 	// --- Jackson streaming parser ---
 	implementation "com.fasterxml.jackson.core:jackson-core:$jacksonCoreVersion"
 
-	// --- AWS S3 async client (high-perf for spooled JSON files) ---
-	implementation platform("software.amazon.awssdk:bom:$awsSdkVersion")
-	implementation "software.amazon.awssdk:s3"
+	// --- Zstandard decompression for Trino spooled segments (json+zstd) ---
+	implementation "com.github.luben:zstd-jni:1.5.6-7"
 
 	testImplementation 'org.springframework.boot:spring-boot-starter-test'
 	testRuntimeOnly 'org.junit.platform:junit-platform-launcher'

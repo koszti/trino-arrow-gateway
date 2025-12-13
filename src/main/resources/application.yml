@@ -2,15 +2,33 @@ server:
   port: 8081
 
 gateway:
+  flight:
+    # Whether to start the Arrow Flight server.
+    enabled: true
+    # Host/interface to bind to (0.0.0.0 listens on all interfaces).
+    bind-host: 0.0.0.0
+    # Host advertised to clients in FlightInfo endpoints (use a reachable hostname).
+    advertise-host: localhost
+    port: 31337
+
   trino:
     base-url: http://localhost:8080
     user: trino-arrow-gateway
-
-  spool:
-    s3:
-      bucket: my-dev-spool-bucket
-      prefix: trino/results/
-      region: eu-central-1
+    query-data-encoding: json
 
   conversion:
+    # Size of the conversion worker pool (threads). Used for spooled segment download/decode/convert work.
     parallelism: 8
+
+    # Rows per Arrow record batch sent via Flight (i.e., per `listener.putNext()`).
+    # Larger values reduce overhead but use more memory per batch.
+    # batch-size: 1024
+
+    # Optional: cap how many spooled segments are processed concurrently.
+    # Defaults to `parallelism` if omitted.
+    # Lower this if Trino spooled downloads are large or you want to reduce pressure on Trino/network.
+    # max-in-flight-segments: 8
+
+    # Optional: cap how many ArrowRecordBatches are buffered per segment while streaming to Flight.
+    # This bounds memory when conversion is faster than the Flight client consumes data.
+    # max-buffered-batches-per-segment: 4

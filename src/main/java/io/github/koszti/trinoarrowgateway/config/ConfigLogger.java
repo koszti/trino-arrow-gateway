@@ -12,15 +12,15 @@ public class ConfigLogger
     private static final Logger log = LoggerFactory.getLogger(ConfigLogger.class);
 
     private final GatewayTrinoProperties trinoProps;
-    private final GatewaySpoolS3Properties spoolProps;
     private final GatewayConversionProperties convProps;
+    private final GatewayFlightProperties flightProps;
 
     public ConfigLogger(GatewayTrinoProperties trinoProps,
-            GatewaySpoolS3Properties spoolProps,
-            GatewayConversionProperties convProps) {
+            GatewayConversionProperties convProps,
+            GatewayFlightProperties flightProps) {
         this.trinoProps = trinoProps;
-        this.spoolProps = spoolProps;
         this.convProps = convProps;
+        this.flightProps = flightProps;
     }
 
     @Override
@@ -28,8 +28,12 @@ public class ConfigLogger
     {
         log.info("Trino base URL      : {}", trinoProps.getBaseUrl());
         log.info("Trino user          : {}", trinoProps.getUser());
-        log.info("Spool S3 bucket     : {}", spoolProps.getBucket());
-        log.info("Spool S3 prefix     : {}", spoolProps.getPrefix());
+        log.info("Trino data encoding : {}", trinoProps.getQueryDataEncoding());
+        log.info("Flight bind         : {}:{}", flightProps.getBindHost(), flightProps.getPort());
+        log.info("Flight advertise    : {}:{}", flightProps.getAdvertiseHost(), flightProps.getPort());
         log.info("Conversion threads  : {}", convProps.getParallelism());
+        log.info("Arrow batch size    : {}", convProps.getBatchSize());
+        log.info("In-flight segments  : {}", convProps.getMaxInFlightSegments());
+        log.info("Batch buffer/segment: {}", convProps.getMaxBufferedBatchesPerSegment());
     }
 }
