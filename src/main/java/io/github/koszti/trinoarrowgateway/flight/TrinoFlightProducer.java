@@ -7,15 +7,17 @@ import io.github.koszti.trinoarrowgateway.convert.SpooledRowsToArrowConverter;
 import io.github.koszti.trinoarrowgateway.spool.HttpSpooledSegmentClient;
 import io.github.koszti.trinoarrowgateway.trino.QueryRegistry;
 import io.github.koszti.trinoarrowgateway.trino.TrinoClient;
-import io.github.koszti.trinoarrowgateway.trino.TrinoQueryFailedException;
 import io.github.koszti.trinoarrowgateway.trino.TrinoQueryHandle;
-import io.github.koszti.trinoarrowgateway.trino.TrinoUnavailableException;
+import io.github.koszti.trinoarrowgateway.trino.exception.TrinoQueryFailedException;
+import io.github.koszti.trinoarrowgateway.trino.exception.TrinoRequestRejectedException;
+import io.github.koszti.trinoarrowgateway.trino.exception.TrinoUnavailableException;
 import com.github.luben.zstd.ZstdInputStream;
 import org.apache.arrow.flight.CallStatus;
 import org.apache.arrow.flight.FlightDescriptor;
 import org.apache.arrow.flight.FlightEndpoint;
 import org.apache.arrow.flight.FlightInfo;
 import org.apache.arrow.flight.FlightProducer;
+import org.apache.arrow.flight.FlightRuntimeException;
 import org.apache.arrow.flight.Location;
 import org.apache.arrow.flight.NoOpFlightProducer;
 import org.apache.arrow.flight.Ticket;
@@ -132,6 +134,38 @@ public class TrinoFlightProducer extends NoOpFlightProducer {
         listener.error(status.withDescription(message).toRuntimeException());
     }
 
+    private static Throwable rootCause(Throwable t) {
+        if (t == null) {
+            return null;
+        }
+        Throwable cur = t;
+        while (cur.getCause() != null && cur.getCause() != cur) {
+            cur = cur.getCause();
+        }
+        return cur;
+    }
+
+    private static String safeMessage(Throwable t) {
+        if (t == null) {
+            return "(null)";
+        }
+        String msg = t.getMessage();
+        if (msg == null || msg.isBlank()) {
+            return t.getClass().getSimpleName();
+        }
+        return msg;
+    }
+
+    private static FlightRuntimeException toStreamFailure(String queryId, Throwable t) {
+        if (t instanceof FlightRuntimeException fre) {
+            return fre;
+        }
+        Throwable root = rootCause(t);
+        String rootMsg = safeMessage(root != null ? root : t);
+        String msg = "Failed to stream spooled results for queryId=" + queryId + ": " + rootMsg;
+        return CallStatus.INTERNAL.withDescription(msg).withCause(t).toRuntimeException();
+    }
+
     private static String unsupportedEncodingMessage(String encoding) {
         return "Unsupported Trino spooled encoding: " + encoding + " (supported: json, json+zstd)";
     }
@@ -150,6 +184,10 @@ public class TrinoFlightProducer extends NoOpFlightProducer {
         TrinoQueryHandle handle;
         try {
             handle = trinoClient.submitQuery(sql);
+        } catch (TrinoRequestRejectedException e) {
+            String msg = "Trino rejected query submission (HTTP " + e.getStatusCode() + "): " + e.getMessage();
+            log.info("Flight SQL rejected by Trino: {}", msg);
+            throw CallStatus.INVALID_ARGUMENT.withDescription(msg).withCause(e).toRuntimeException();
         } catch (TrinoQueryFailedException e) {
             String msg = "Trino query failed (queryId=" + e.getQueryId() + "): " + e.getMessage();
             log.info("Flight SQL failed: {}", msg);
@@ -196,7 +234,7 @@ public class TrinoFlightProducer extends NoOpFlightProducer {
 
         TrinoQueryHandle handle = queryRegistry.get(queryId);
         if (handle == null) {
-            listener.error(new IllegalStateException("Unknown queryId: " + queryId));
+            fail(listener, CallStatus.NOT_FOUND, "Unknown queryId: " + queryId);
             return;
         }
 
@@ -217,8 +255,9 @@ public class TrinoFlightProducer extends NoOpFlightProducer {
 
         try {
             streamSpooledSegments(handle, schema, encoding, listener);
-        } catch (Exception e) {
-            listener.error(e);
+        } catch (Throwable t) {
+            log.warn("getStream failed for queryId={}: {}", queryId, safeMessage(t), t);
+            listener.error(toStreamFailure(queryId, t));
         }
     }
 
@@ -268,7 +307,14 @@ public class TrinoFlightProducer extends NoOpFlightProducer {
                                 spooledSegmentClient.ack(ackUri, headers);
                                 put(queue, SegmentItem.end());
                             } catch (Throwable t) {
-                                put(queue, SegmentItem.error(t));
+                                Throwable wrapped = t;
+                                try {
+                                    wrapped = new RuntimeException(
+                                            "Spooled segment processing failed (uri=" + segment.uri() + "): " + safeMessage(t),
+                                            t);
+                                } catch (Exception ignored) {
+                                }
+                                put(queue, SegmentItem.error(wrapped));
                                 put(queue, SegmentItem.end());
                             } finally {
                                 if (acquired) {
@@ -300,7 +346,9 @@ public class TrinoFlightProducer extends NoOpFlightProducer {
         while (true) {
             SegmentItem item = pipe.queue.take();
             if (item.error != null) {
-                throw new RuntimeException("Spooled segment failed for uri=" + pipe.segment.uri(), item.error);
+                throw new RuntimeException(
+                        "Spooled segment failed (uri=" + pipe.segment.uri() + "): " + safeMessage(item.error),
+                        item.error);
             }
             if (item.end) {
                 return;

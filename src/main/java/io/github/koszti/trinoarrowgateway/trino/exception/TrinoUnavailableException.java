@@ -1,4 +1,4 @@
-package io.github.koszti.trinoarrowgateway.trino;
+package io.github.koszti.trinoarrowgateway.trino.exception;
 
 import java.util.Objects;
 
@@ -15,4 +15,3 @@ public class TrinoUnavailableException extends RuntimeException {
         return baseUrl;
     }
 }
-

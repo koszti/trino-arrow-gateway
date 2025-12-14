@@ -20,7 +20,6 @@ public class TrinoStatementResponse
      * Trino's "data" field is polymorphic:
      * - When results are inlined, it's typically an array-of-arrays (rows).
      * - When results are spooled, it's an object (encoding + segments).
-     *
      * We keep it as JsonNode and interpret it where needed.
      */
     private JsonNode data;

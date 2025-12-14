@@ -3,6 +3,9 @@ package io.github.koszti.trinoarrowgateway.trino;
 import io.github.koszti.trinoarrowgateway.config.GatewayTrinoProperties;
 import io.github.koszti.trinoarrowgateway.spool.SpooledSegmentHeaders;
 import io.github.koszti.trinoarrowgateway.trino.dto.TrinoStatementResponse;
+import io.github.koszti.trinoarrowgateway.trino.exception.TrinoQueryFailedException;
+import io.github.koszti.trinoarrowgateway.trino.exception.TrinoRequestRejectedException;
+import io.github.koszti.trinoarrowgateway.trino.exception.TrinoUnavailableException;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.apache.arrow.vector.types.FloatingPointPrecision;
@@ -15,6 +18,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.web.client.RestClient;
+import org.springframework.web.client.RestClientResponseException;
 
 import java.net.URI;
 import java.util.Comparator;
@@ -43,6 +47,34 @@ public class TrinoClientImpl implements TrinoClient
         this.objectMapper = objectMapper;
     }
 
+    private String extractTrinoErrorMessage(RestClientResponseException e) {
+        String body = e.getResponseBodyAsString();
+        if (body.isBlank()) {
+            return !e.getStatusText().isBlank() ? e.getStatusText() : e.getMessage();
+        }
+
+        String trimmed = body.trim();
+        try {
+            JsonNode node = objectMapper.readTree(trimmed);
+            // Sometimes Trino responds with: {"error":{"message":"..."}}
+            JsonNode msg = node.path("message");
+            if (msg.isTextual() && !msg.asText().isBlank()) {
+                return msg.asText();
+            }
+            JsonNode errMsg = node.path("error").path("message");
+            if (errMsg.isTextual() && !errMsg.asText().isBlank()) {
+                return errMsg.asText();
+            }
+        } catch (Exception ignored) {
+        }
+
+        int max = 2000;
+        if (trimmed.length() > max) {
+            return trimmed.substring(0, max) + "...";
+        }
+        return trimmed;
+    }
+
     @Override
     public TrinoQueryHandle submitQuery(String sql) {
         Objects.requireNonNull(sql, "sql must not be null");
@@ -68,6 +100,13 @@ public class TrinoClientImpl implements TrinoClient
                     .body(sql)
                     .retrieve()
                     .body(TrinoStatementResponse.class);
+        } catch (RestClientResponseException e) {
+            int status = e.getStatusCode().value();
+            String msg = extractTrinoErrorMessage(e);
+            if (e.getStatusCode().is4xxClientError()) {
+                throw new TrinoRequestRejectedException(status, msg, e);
+            }
+            throw new TrinoUnavailableException(trinoProps.getBaseUrl(), e);
         } catch (Exception e) {
             throw new TrinoUnavailableException(trinoProps.getBaseUrl(), e);
         }

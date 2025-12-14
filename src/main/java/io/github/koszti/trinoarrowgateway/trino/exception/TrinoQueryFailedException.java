@@ -1,4 +1,4 @@
-package io.github.koszti.trinoarrowgateway.trino;
+package io.github.koszti.trinoarrowgateway.trino.exception;
 
 import java.util.Objects;
 
@@ -21,4 +21,3 @@ public class TrinoQueryFailedException extends RuntimeException {
         return state;
     }
 }
-
