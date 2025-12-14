@@ -68,4 +68,38 @@ class TrinoStatementResponseDeserializationTest {
         assertEquals(1, data.getSegments().getFirst().getHeaders().size());
         assertEquals("v1", data.getSegments().getFirst().getHeaders().get("x-test").getFirst());
     }
+
+    @Test
+    void deserializesInlineSegmentData() throws Exception {
+        String json = """
+                {
+                  "id": "q3",
+                  "columns": [{"name":"id","type":"bigint"}],
+                  "data": {
+                    "encoding": "json",
+                    "segments": [
+                      {
+                        "type": "inline",
+                        "data": "W1sxXV0=",
+                        "metadata": { "rowOffset": 0, "rowsCount": 1, "segmentSize": 4 }
+                      }
+                    ]
+                  },
+                  "stats": {"state": "RUNNING"},
+                  "nextUri": "http://trino/v1/statement/q3/1"
+                }
+                """;
+
+        TrinoStatementResponse resp = objectMapper.readValue(json, TrinoStatementResponse.class);
+        assertEquals("q3", resp.getId());
+        assertNotNull(resp.getData());
+        assertTrue(resp.getData().isObject());
+
+        TrinoStatementResponse.Data data = objectMapper.treeToValue(resp.getData(), TrinoStatementResponse.Data.class);
+        assertEquals("json", data.getEncoding());
+        assertNotNull(data.getSegments());
+        assertEquals(1, data.getSegments().size());
+        assertEquals("inline", data.getSegments().getFirst().getType());
+        assertEquals("W1sxXV0=", data.getSegments().getFirst().getData());
+    }
 }

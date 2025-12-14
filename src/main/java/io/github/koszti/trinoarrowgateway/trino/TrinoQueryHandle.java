@@ -65,6 +65,7 @@ public class TrinoQueryHandle
             Long segmentSize,
             String expiresAt,
             String type,
-            Map<String, String> headers
+            Map<String, String> headers,
+            byte[] inlineData
     ) {}
 }

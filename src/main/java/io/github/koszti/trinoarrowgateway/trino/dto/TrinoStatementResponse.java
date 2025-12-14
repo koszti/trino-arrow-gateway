@@ -121,6 +121,7 @@ public class TrinoStatementResponse
         private String type;   // e.g. "spooled"
         private String uri;    // download URI (http(s)://...)
         private String ackUri; // ack URI (http(s)://...)
+        private String data;   // inline segment payload (base64-encoded)
         private SegmentMetadata metadata;
         private Map<String, List<String>> headers;
 
@@ -146,6 +147,14 @@ public class TrinoStatementResponse
 
         public void setAckUri(String ackUri) {
             this.ackUri = ackUri;
+        }
+
+        public String getData() {
+            return data;
+        }
+
+        public void setData(String data) {
+            this.data = data;
         }
 
         public SegmentMetadata getMetadata() {

@@ -21,6 +21,7 @@ import org.springframework.web.client.RestClient;
 import org.springframework.web.client.RestClientResponseException;
 
 import java.net.URI;
+import java.util.Base64;
 import java.util.Comparator;
 import java.util.List;
 import java.util.LinkedHashMap;
@@ -230,17 +231,7 @@ public class TrinoClientImpl implements TrinoClient
         }
 
         for (TrinoStatementResponse.Segment s : spoolData.getSegments()) {
-            if (s == null || s.getUri() == null || s.getUri().isBlank()) {
-                continue;
-            }
-
-            URI uri;
-            URI ackUri;
-            try {
-                uri = URI.create(s.getUri());
-                ackUri = s.getAckUri() != null && !s.getAckUri().isBlank() ? URI.create(s.getAckUri()) : null;
-            } catch (IllegalArgumentException e) {
-                log.warn("Skipping invalid spooled segment URI(s): uri='{}' ackUri='{}'", s.getUri(), s.getAckUri());
+            if (s == null) {
                 continue;
             }
 
@@ -251,16 +242,63 @@ public class TrinoClientImpl implements TrinoClient
             String type = s.getType();
             Map<String, String> headers = SpooledSegmentHeaders.toSingleValueHeaders(s.getHeaders());
 
-            segmentsByUri.putIfAbsent(uri.toString(), new TrinoQueryHandle.TrinoSpoolSegment(
-                    uri,
-                    ackUri,
-                    rowOffset,
-                    rowsCount,
-                    segmentSize,
-                    expiresAt,
-                    type,
-                    headers
-            ));
+            if ("inline".equalsIgnoreCase(type)) {
+                if (s.getData() == null || s.getData().isBlank()) {
+                    continue;
+                }
+
+                byte[] decoded;
+                try {
+                    decoded = Base64.getDecoder().decode(s.getData());
+                } catch (IllegalArgumentException e) {
+                    log.warn("Skipping invalid inline segment data (base64 decode failed) for queryId={}, rowOffset={}: {}",
+                            response.getId(), rowOffset, e.toString());
+                    continue;
+                }
+
+                URI inlineUri = URI.create("inline://trino/" + response.getId() + "/" +
+                        (rowOffset != null ? rowOffset : "unknown"));
+
+                segmentsByUri.putIfAbsent(inlineUri.toString(), new TrinoQueryHandle.TrinoSpoolSegment(
+                        inlineUri,
+                        null,
+                        rowOffset,
+                        rowsCount,
+                        segmentSize,
+                        expiresAt,
+                        type,
+                        Map.of(),
+                        decoded
+                ));
+            } else if ("spooled".equalsIgnoreCase(type)) {
+                if (s.getUri() == null || s.getUri().isBlank()) {
+                    continue;
+                }
+
+                URI uri;
+                URI ackUri;
+                try {
+                    uri = URI.create(s.getUri());
+                    ackUri = s.getAckUri() != null && !s.getAckUri().isBlank() ? URI.create(s.getAckUri()) : null;
+                } catch (IllegalArgumentException e) {
+                    log.warn("Skipping invalid spooled segment URI(s): uri='{}' ackUri='{}'", s.getUri(), s.getAckUri());
+                    continue;
+                }
+
+                segmentsByUri.putIfAbsent(uri.toString(), new TrinoQueryHandle.TrinoSpoolSegment(
+                        uri,
+                        ackUri,
+                        rowOffset,
+                        rowsCount,
+                        segmentSize,
+                        expiresAt,
+                        type,
+                        headers,
+                        null
+                ));
+            } else {
+                // Unknown segment type; ignore for now.
+            }
         }
 
         return spoolEncoding;

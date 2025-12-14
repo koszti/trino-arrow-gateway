@@ -30,7 +30,10 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
 
+import java.io.IOException;
 import java.io.InputStream;
+import java.io.ByteArrayInputStream;
+import java.io.PushbackInputStream;
 import java.net.URI;
 import java.nio.charset.StandardCharsets;
 import java.util.Collections;
@@ -128,6 +131,32 @@ public class TrinoFlightProducer extends NoOpFlightProducer {
 
     private static boolean isJsonZstdEncoding(String encoding) {
         return "json+zstd".equalsIgnoreCase(encoding);
+    }
+
+    private static InputStream maybeDecodeZstd(InputStream raw, boolean zstdPreferred) throws IOException {
+        if (!zstdPreferred) {
+            return raw;
+        }
+
+        // Zstandard frames start with the magic bytes: 28 B5 2F FD
+        PushbackInputStream in = new PushbackInputStream(raw, 4);
+        byte[] header = in.readNBytes(4);
+        if (header.length > 0) {
+            in.unread(header);
+        }
+
+        boolean looksZstd = header.length == 4
+                && (header[0] & 0xFF) == 0x28
+                && (header[1] & 0xFF) == 0xB5
+                && (header[2] & 0xFF) == 0x2F
+                && (header[3] & 0xFF) == 0xFD;
+
+        // Trino may sometimes label payload as json+zstd even when it is plain JSON.
+        if (!looksZstd) {
+            return in;
+        }
+
+        return new ZstdInputStream(in);
     }
 
     private static void fail(ServerStreamListener listener, CallStatus status, String message) {
@@ -289,22 +318,26 @@ public class TrinoFlightProducer extends NoOpFlightProducer {
                                 URI uri = segment.uri();
                                 URI ackUri = segment.ackUri();
                                 var headers = segment.headers();
+                                byte[] inlineData = segment.inlineData();
 
-                                try (HttpSpooledSegmentClient.FetchedSegment fetched = spooledSegmentClient.fetch(uri, ackUri, headers)) {
-                                    if (isJsonZstd) {
-                                        try (ZstdInputStream decoded = new ZstdInputStream(fetched.body())) {
-                                            spooledRowsToArrowConverter.convertStreaming(decoded, schema, batchSize,
-                                                    batch -> put(queue, SegmentItem.batch(batch)));
-                                        }
-                                    } else {
-                                        try (InputStream decoded = fetched.body()) {
+                                if (inlineData != null) {
+                                    try (InputStream raw = new ByteArrayInputStream(inlineData);
+                                            InputStream decoded = maybeDecodeZstd(raw, isJsonZstd)) {
+                                        spooledRowsToArrowConverter.convertStreaming(decoded, schema, batchSize,
+                                                batch -> put(queue, SegmentItem.batch(batch)));
+                                    }
+                                } else {
+                                    try (HttpSpooledSegmentClient.FetchedSegment fetched = spooledSegmentClient.fetch(uri, ackUri, headers)) {
+                                        try (InputStream decoded = maybeDecodeZstd(fetched.body(), isJsonZstd)) {
                                             spooledRowsToArrowConverter.convertStreaming(decoded, schema, batchSize,
                                                     batch -> put(queue, SegmentItem.batch(batch)));
                                         }
                                     }
                                 }
 
-                                spooledSegmentClient.ack(ackUri, headers);
+                                if (inlineData == null) {
+                                    spooledSegmentClient.ack(ackUri, headers);
+                                }
                                 put(queue, SegmentItem.end());
                             } catch (Throwable t) {
                                 Throwable wrapped = t;
