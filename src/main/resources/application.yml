@@ -14,7 +14,7 @@ gateway:
   trino:
     base-url: http://localhost:8080
     user: trino-arrow-gateway
-    query-data-encoding: json
+    query-data-encoding: json+zstd
 
   conversion:
     # Size of the conversion worker pool (threads). Used for spooled segment download/decode/convert work.
