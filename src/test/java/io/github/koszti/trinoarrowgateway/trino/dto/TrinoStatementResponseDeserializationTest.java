@@ -42,7 +42,10 @@ class TrinoStatementResponseDeserializationTest {
                         "type": "spooled",
                         "uri": "http://localhost:8080/v1/spooled/download/abc",
                         "ackUri": "http://localhost:8080/v1/spooled/ack/abc",
-                        "metadata": { "rowOffset": 0, "rowsCount": 1, "segmentSize": 29, "expiresAt": "2025-12-12T22:40:54.218171619" }
+                        "metadata": { "rowOffset": 0, "rowsCount": 1, "segmentSize": 29, "expiresAt": "2025-12-12T22:40:54.218171619" },
+                        "headers": {
+                          "x-test": ["v1"]
+                        }
                       }
                     ]
                   },
@@ -61,6 +64,8 @@ class TrinoStatementResponseDeserializationTest {
         assertNotNull(data.getSegments());
         assertEquals(1, data.getSegments().size());
         assertEquals("spooled", data.getSegments().getFirst().getType());
+        assertNotNull(data.getSegments().getFirst().getHeaders());
+        assertEquals(1, data.getSegments().getFirst().getHeaders().size());
+        assertEquals("v1", data.getSegments().getFirst().getHeaders().get("x-test").getFirst());
     }
 }
-

@@ -11,6 +11,7 @@ import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.time.Duration;
+import java.util.Map;
 import java.util.Objects;
 
 /**
@@ -32,13 +33,22 @@ public class HttpSpooledSegmentClient {
                 .build();
     }
 
-    public FetchedSegment fetch(URI uri, URI ackUri) throws IOException {
+    public FetchedSegment fetch(URI uri, URI ackUri, Map<String, String> headers) throws IOException {
         Objects.requireNonNull(uri, "uri must not be null");
 
-        HttpRequest request = HttpRequest.newBuilder(uri)
+        HttpRequest.Builder requestBuilder = HttpRequest.newBuilder(uri)
                 .timeout(Duration.ofMinutes(5))
-                .GET()
-                .build();
+                .GET();
+
+        if (headers != null && !headers.isEmpty()) {
+            headers.forEach((k, v) -> {
+                if (k != null && !k.isBlank() && v != null) {
+                    requestBuilder.header(k, v);
+                }
+            });
+        }
+
+        HttpRequest request = requestBuilder.build();
 
         HttpResponse<InputStream> response;
         try {
@@ -61,15 +71,24 @@ public class HttpSpooledSegmentClient {
         return new FetchedSegment(uri, ackUri, response.body());
     }
 
-    public void ack(URI ackUri) throws IOException {
+    public void ack(URI ackUri, Map<String, String> headers) throws IOException {
         if (ackUri == null) {
             return;
         }
 
-        HttpRequest request = HttpRequest.newBuilder(ackUri)
+        HttpRequest.Builder requestBuilder = HttpRequest.newBuilder(ackUri)
                 .timeout(Duration.ofSeconds(30))
-                .GET()
-                .build();
+                .GET();
+
+        if (headers != null && !headers.isEmpty()) {
+            headers.forEach((k, v) -> {
+                if (k != null && !k.isBlank() && v != null) {
+                    requestBuilder.header(k, v);
+                }
+            });
+        }
+
+        HttpRequest request = requestBuilder.build();
 
         HttpResponse<Void> response;
         try {
@@ -98,4 +117,3 @@ public class HttpSpooledSegmentClient {
         }
     }
 }
-

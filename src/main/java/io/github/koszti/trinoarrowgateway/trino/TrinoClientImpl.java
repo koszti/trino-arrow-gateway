@@ -1,6 +1,7 @@
 package io.github.koszti.trinoarrowgateway.trino;
 
 import io.github.koszti.trinoarrowgateway.config.GatewayTrinoProperties;
+import io.github.koszti.trinoarrowgateway.spool.SpooledSegmentHeaders;
 import io.github.koszti.trinoarrowgateway.trino.dto.TrinoStatementResponse;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -209,6 +210,7 @@ public class TrinoClientImpl implements TrinoClient
             Long segmentSize = s.getMetadata() != null ? s.getMetadata().getSegmentSize() : null;
             String expiresAt = s.getMetadata() != null ? s.getMetadata().getExpiresAt() : null;
             String type = s.getType();
+            Map<String, String> headers = SpooledSegmentHeaders.toSingleValueHeaders(s.getHeaders());
 
             segmentsByUri.putIfAbsent(uri.toString(), new TrinoQueryHandle.TrinoSpoolSegment(
                     uri,
@@ -217,7 +219,8 @@ public class TrinoClientImpl implements TrinoClient
                     rowsCount,
                     segmentSize,
                     expiresAt,
-                    type
+                    type,
+                    headers
             ));
         }
 

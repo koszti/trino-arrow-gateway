@@ -3,6 +3,7 @@ package io.github.koszti.trinoarrowgateway.trino.dto;
 import com.fasterxml.jackson.databind.JsonNode;
 
 import java.util.List;
+import java.util.Map;
 
 /**
  * Minimal view of Trino's /v1/statement response.
@@ -122,6 +123,7 @@ public class TrinoStatementResponse
         private String uri;    // download URI (http(s)://...)
         private String ackUri; // ack URI (http(s)://...)
         private SegmentMetadata metadata;
+        private Map<String, List<String>> headers;
 
         public String getType() {
             return type;
@@ -153,6 +155,14 @@ public class TrinoStatementResponse
 
         public void setMetadata(SegmentMetadata metadata) {
             this.metadata = metadata;
+        }
+
+        public Map<String, List<String>> getHeaders() {
+            return headers;
+        }
+
+        public void setHeaders(Map<String, List<String>> headers) {
+            this.headers = headers;
         }
     }
 

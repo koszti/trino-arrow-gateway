@@ -249,8 +249,9 @@ public class TrinoFlightProducer extends NoOpFlightProducer {
 
                                 URI uri = segment.uri();
                                 URI ackUri = segment.ackUri();
+                                var headers = segment.headers();
 
-                                try (HttpSpooledSegmentClient.FetchedSegment fetched = spooledSegmentClient.fetch(uri, ackUri)) {
+                                try (HttpSpooledSegmentClient.FetchedSegment fetched = spooledSegmentClient.fetch(uri, ackUri, headers)) {
                                     if (isJsonZstd) {
                                         try (ZstdInputStream decoded = new ZstdInputStream(fetched.body())) {
                                             spooledRowsToArrowConverter.convertStreaming(decoded, schema, batchSize,
@@ -264,7 +265,7 @@ public class TrinoFlightProducer extends NoOpFlightProducer {
                                     }
                                 }
 
-                                spooledSegmentClient.ack(ackUri);
+                                spooledSegmentClient.ack(ackUri, headers);
                                 put(queue, SegmentItem.end());
                             } catch (Throwable t) {
                                 put(queue, SegmentItem.error(t));

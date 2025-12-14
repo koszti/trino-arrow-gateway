@@ -9,6 +9,7 @@ import java.io.OutputStream;
 import java.net.InetSocketAddress;
 import java.net.URI;
 import java.nio.charset.StandardCharsets;
+import java.util.Map;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -28,10 +29,14 @@ class HttpSpooledSegmentClientTest {
     @Test
     void downloadsAndAcks() throws Exception {
         AtomicBoolean acked = new AtomicBoolean(false);
+        AtomicBoolean downloadSawHeaders = new AtomicBoolean(false);
+        AtomicBoolean ackSawHeaders = new AtomicBoolean(false);
 
         server = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
         server.createContext("/download", exchange -> {
             try {
+                assertEquals("v1", exchange.getRequestHeaders().getFirst("X-Test"));
+                downloadSawHeaders.set(true);
                 respond(exchange, 200, "hello");
             } catch (Exception e) {
                 exchange.close();
@@ -41,6 +46,8 @@ class HttpSpooledSegmentClientTest {
         server.createContext("/ack", exchange -> {
             acked.set(true);
             try {
+                assertEquals("v1", exchange.getRequestHeaders().getFirst("X-Test"));
+                ackSawHeaders.set(true);
                 respond(exchange, 200, "ok");
             } catch (Exception e) {
                 exchange.close();
@@ -54,14 +61,17 @@ class HttpSpooledSegmentClientTest {
         URI ackUri = URI.create("http://127.0.0.1:" + port + "/ack");
 
         HttpSpooledSegmentClient client = new HttpSpooledSegmentClient();
+        Map<String, String> headers = Map.of("X-Test", "v1");
 
-        try (HttpSpooledSegmentClient.FetchedSegment seg = client.fetch(downloadUri, ackUri)) {
+        try (HttpSpooledSegmentClient.FetchedSegment seg = client.fetch(downloadUri, ackUri, headers)) {
             byte[] body = seg.body().readAllBytes();
             assertEquals("hello", new String(body, StandardCharsets.UTF_8));
         }
 
-        client.ack(ackUri);
+        client.ack(ackUri, headers);
         assertTrue(acked.get());
+        assertTrue(downloadSawHeaders.get());
+        assertTrue(ackSawHeaders.get());
     }
 
     private static void respond(HttpExchange exchange, int status, String body) throws Exception {

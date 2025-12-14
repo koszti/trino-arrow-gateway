@@ -4,6 +4,7 @@ import org.apache.arrow.vector.types.pojo.Schema;
 
 import java.net.URI;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 
 /**
@@ -63,6 +64,7 @@ public class TrinoQueryHandle
             Long rowsCount,
             Long segmentSize,
             String expiresAt,
-            String type
+            String type,
+            Map<String, String> headers
     ) {}
 }
