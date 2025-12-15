@@ -14,6 +14,14 @@ def print_section(title: str) -> None:
     line = "=" * len(title)
     print(f"\n{title}\n{line}")
 
+def format_elapsed(seconds: float) -> str:
+    seconds = max(0.0, float(seconds))
+    minutes = int(seconds // 60)
+    rem = seconds - (minutes * 60)
+    if minutes > 0:
+        return f"{minutes}m {rem:.3f}s"
+    return f"{rem:.3f}s"
+
 
 def print_kv(key: str, value: object) -> None:
     print(f"- {key}: {value}")
@@ -66,7 +74,7 @@ def main():
     print_section("Action: get_flight_info")
     info = client.get_flight_info(descriptor)
     t1 = time.perf_counter()
-    print_kv("Elapsed", f"{(t1 - t0):.3f}s")
+    print_kv("Elapsed", format_elapsed(t1 - t0))
     print_kv("Schema", schema_summary(info.schema))
 
     ticket = info.endpoints[0].ticket
@@ -77,7 +85,7 @@ def main():
     table = reader.read_all()
     table = table.combine_chunks()
     t3 = time.perf_counter()
-    print_kv("Elapsed", f"{(t3 - t2):.3f}s")
+    print_kv("Elapsed", format_elapsed(t3 - t2))
 
     print_section("Result Summary")
     print_kv("Rows", table.num_rows)
