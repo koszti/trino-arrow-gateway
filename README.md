@@ -65,7 +65,7 @@ If Trino does not return `data.segments[]`, the Flight request fails (there is n
 
 Start the app, then run the example client:
 ```bash
-cd python-client
+cd benchmark
 python -m venv .venv
 source .venv/bin/activate
 pip install -r requirements.txt
@@ -115,7 +115,7 @@ JAVA_TOOL_OPTIONS="-Djavax.net.ssl.trustStore=$(pwd)/docker/trino/dev-only-trust
 
 4) Run a query via the Python Flight client:
 ```bash
-python python-client/flight_client_test.py "SELECT * FROM tpch.sf1.orders LIMIT 100000"
+python benchmark/flight_client_test.py "SELECT * FROM tpch.sf1.orders LIMIT 100000"
 ```
 
 ## Performance tuning
