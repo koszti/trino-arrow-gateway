@@ -51,12 +51,15 @@ This gateway relies on Trino returning *spooled* results via `/v1/statement` pol
 
 - When spooling is enabled, Trino responses include a `data` object with:
   - `encoding`: `json` or `json+zstd`
-  - `segments[]`: each with a downloadable `uri` and an `ackUri`
-- The gateway downloads each `segments[].uri` and then calls `GET segments[].ackUri` (expects HTTP 200).
+  - `segments[]`: one of:
+    - `type: spooled`: has a downloadable `uri` and an `ackUri`
+    - `type: inline`: has base64-encoded `data` (no download/ack)
+- For `type: spooled`, the gateway downloads `segments[].uri` and then calls `GET segments[].ackUri` (expects HTTP 200).
   The ack request is required to allow Trino to delete the spooled segment.
+- For `type: inline`, the gateway decodes `segments[].data` and streams it like a normal segment.
 - Segment payload is expected to be JSON array-of-rows: `[[col1, col2, ...], ...]` (matching Trino column order).
 
-If Trino does not return spooled `segments[]`, the Flight request fails (there is no local JSON fallback).
+If Trino does not return `data.segments[]`, the Flight request fails (there is no fallback to top-level inline `data: [[...]]`).
 
 ## Arrow Flight demo
 
@@ -87,6 +90,32 @@ Clients should connect to `grpc+tcp://<advertise-host>:<port>`.
 
 ```bash
 ./gradlew test
+```
+
+## Local testing: Trino spooling + MinIO (Docker)
+
+This repo includes a local Trino + MinIO setup that enables the Trino spooling protocol and stores segments in an S3-compatible filesystem (MinIO).
+
+1) Add a host entry to `/etc/hosts` so the host machine can resolve the MinIO TLS certificate name.
+   This is required because Trino spooling uses server-side encryption with customer-provided keys (SSE-C), which requires TLS;
+   the included MinIO TLS cert is issued for `minio.local`, so hostname validation must succeed:
+```text
+127.0.0.1       minio.local
+```
+
+2) Start Trino + MinIO:
+```bash
+docker compose -f docker/docker-compose.yml up
+```
+
+3) Start the gateway with the MinIO truststore (so it can download `segments[].uri` over HTTPS):
+```bash
+JAVA_TOOL_OPTIONS="-Djavax.net.ssl.trustStore=$(pwd)/docker/trino/dev-only-truststore.jks -Djavax.net.ssl.trustStorePassword=changeit" ./gradlew bootRun
+```
+
+4) Run a query via the Python Flight client:
+```bash
+python python-client/flight_client_test.py "SELECT * FROM tpch.sf1.orders LIMIT 100000"
 ```
 
 ## Publishing coordinates

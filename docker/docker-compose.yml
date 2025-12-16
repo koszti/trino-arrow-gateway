@@ -1,0 +1,73 @@
+services:
+  trino-coordinator:
+    image: trinodb/trino:478
+    container_name: trino-coordinator
+    ports:
+      - "8080:8080"
+    volumes:
+      - ./trino/coordinator/etc:/etc/trino:ro
+      - ./trino/dev-only-truststore.jks:/etc/trino-trust/truststore.jks:ro
+    environment:
+      JAVA_TOOL_OPTIONS: >-
+        -Djavax.net.ssl.trustStore=/etc/trino-trust/truststore.jks
+        -Djavax.net.ssl.trustStorePassword=changeit
+    extra_hosts:
+      - "minio.local:host-gateway"
+    depends_on:
+      minio:
+        condition: service_healthy
+      minio-init:
+        condition: service_completed_successfully
+
+  trino-worker:
+    image: trinodb/trino:478
+    volumes:
+      - ./trino/worker/etc:/etc/trino:ro
+      - ./trino/dev-only-truststore.jks:/etc/trino-trust/truststore.jks:ro
+    environment:
+      JAVA_TOOL_OPTIONS: >-
+        -Djavax.net.ssl.trustStore=/etc/trino-trust/truststore.jks
+        -Djavax.net.ssl.trustStorePassword=changeit
+    extra_hosts:
+      - "minio.local:host-gateway"
+    depends_on:
+      - trino-coordinator
+    deploy:
+      replicas: 3
+
+  minio:
+    image: minio/minio:latest
+    container_name: minio
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: minio-access-key
+      MINIO_ROOT_PASSWORD: minio-secret-key
+    ports:
+      - "9000:9000"   # S3 API
+      - "9001:9001"   # Console UI
+    volumes:
+      - ./minio-data:/data
+      - ./minio-certs/dev-only-public.crt:/root/.minio/certs/public.crt:ro
+      - ./minio-certs/dev-only-private.key:/root/.minio/certs/private.key:ro
+    healthcheck:
+      test: ["CMD", "curl", "-fk", "https://localhost:9000/minio/health/live"]
+      interval: 2s
+      timeout: 2s
+      retries: 30
+
+  # One-shot container to create the bucket used for spooling
+  minio-init:
+    image: minio/mc:latest
+    container_name: minio-init
+    depends_on:
+      minio:
+        condition: service_healthy
+    entrypoint: >
+      /bin/sh -lc "
+      mc alias set local https://minio:9000 minio-access-key minio-secret-key --insecure &&
+      mc mb -p local/spooling --insecure || true &&
+      exit 0
+      "
+
+volumes:
+  minio-data:
