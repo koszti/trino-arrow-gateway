@@ -118,6 +118,30 @@ JAVA_TOOL_OPTIONS="-Djavax.net.ssl.trustStore=$(pwd)/docker/trino/dev-only-trust
 python python-client/flight_client_test.py "SELECT * FROM tpch.sf1.orders LIMIT 100000"
 ```
 
+## Performance tuning
+
+If you see low CPU utilization and slow end-to-end `do_get + read_all`, the gateway is often blocked by backpressure (gRPC send speed / client consumption)
+and/or too little buffering between “segment conversion” and “Flight streaming”.
+
+Tuning knobs (all under `gateway.conversion.*`):
+
+- `max-buffered-batches-per-segment`: increase this first to keep segment workers busy (trades memory for throughput).
+- `max-in-flight-segments`: increase to overlap download/decode/parse across more segments (also increases memory/CPU/network pressure).
+- `parallelism`: upper bound for conversion executor threads; set at least as high as `max-in-flight-segments`.
+- `batch-size`: affects batch granularity and overhead; larger batches reduce per-batch overhead but increase latency/memory.
+
+Suggested starting point for local testing on an 8-core/16-thread machine:
+```yaml
+gateway:
+  trino:
+    query-data-encoding: json+zstd
+  conversion:
+    parallelism: 16
+    max-in-flight-segments: 16
+    max-buffered-batches-per-segment: 64
+```
+If memory/GC becomes an issue, lower `max-buffered-batches-per-segment` first, then `max-in-flight-segments`.
+
 ## Publishing coordinates
 
 Artifacts use the group ID `io.github.koszti.trinoarrowgateway`, e.g.:

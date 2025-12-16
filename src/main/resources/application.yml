@@ -26,9 +26,10 @@ gateway:
 
     # Optional: cap how many spooled segments are processed concurrently.
     # Defaults to `parallelism` if omitted.
-    # Lower this if Trino spooled downloads are large or you want to reduce pressure on Trino/network.
-    # max-in-flight-segments: 8
+    # Lower this if spooled downloads are large or you want to reduce pressure on Trino/network/heap.
+    max-in-flight-segments: 16
 
     # Optional: cap how many ArrowRecordBatches are buffered per segment while streaming to Flight.
     # This bounds memory when conversion is faster than the Flight client consumes data.
-    # max-buffered-batches-per-segment: 4
+    # If set too low, segment workers can spend most of their time blocked on backpressure, reducing throughput/CPU usage.
+    max-buffered-batches-per-segment: 128
