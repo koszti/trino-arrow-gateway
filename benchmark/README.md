@@ -30,10 +30,9 @@ Build the runnable jar:
 
 ```bash
 javac TrinoJdbcBenchmark.java
-jar --create --file TrinoJdbcBenchmark.jar --main-class TrinoJdbcBenchmark -C out .
 ```
 
-Run (you still need the Trino JDBC driver + dependencies on the classpath; easiest is using a Trino server tarball `lib/*`):
+Run (you still need the Trino JDBC driver + dependencies on the classpath):
 
 ```bash
 java -cp "/path/to/trino-jdbc-jar:." TrinoJdbcBenchmark "SELECT * FROM tpch.sf100.orders LIMIT 1_000_000"
