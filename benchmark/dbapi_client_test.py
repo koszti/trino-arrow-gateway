@@ -2,61 +2,32 @@ import os
 import sys
 import time
 
-import pyarrow as pa
 from trino.dbapi import connect
 
-from bench_utils import env_int, format_elapsed, print_kv, print_sample_rows, print_section, schema_summary
+from bench_utils import dbapi_schema_summary, env_int, format_elapsed, print_kv, print_sample_rows_dbapi, print_section
 
 EXAMPLE_SQL = "SELECT * FROM tpch.sf1.orders LIMIT 1000000"
 FETCH_SIZE = 1000
 PROGRESS_EVERY = 100_000
 SAMPLE_N = 10
 
+def env_verify(name: str, default: bool = True) -> bool | str:
+    raw = os.getenv(name)
+    if raw is None:
+        return default
+    value = raw.strip()
+    if not value:
+        return default
 
-def _normalize_trino_type(type_code: object) -> str:
-    if type_code is None:
-        return ""
-    if isinstance(type_code, str):
-        return type_code
-    name = getattr(type_code, "name", None)
-    if isinstance(name, str) and name:
-        return name
-    return str(type_code)
+    lowered = value.lower()
+    if lowered in {"0", "false", "no", "off"}:
+        return False
+    if lowered in {"1", "true", "yes", "on"}:
+        return True
 
-
-def trino_type_to_arrow(trino_type: str) -> pa.DataType:
-    t = (trino_type or "").strip().upper()
-    if not t:
-        return pa.string()
-
-    if t.startswith("BIGINT"):
-        return pa.int64()
-    if t.startswith("INTEGER") or t == "INT":
-        return pa.int32()
-    if t.startswith("DOUBLE"):
-        return pa.float64()
-    if t.startswith("VARCHAR") or t.startswith("CHAR") or t.startswith("JSON"):
-        return pa.string()
-    if t.startswith("DATE"):
-        return pa.date32()
-
-    # Best-effort fallback for complex/unknown types (ARRAY/MAP/ROW, etc.)
-    return pa.string()
-
-
-def arrow_schema_from_description(description: object) -> pa.Schema | None:
-    if not description:
-        return None
-
-    fields: list[pa.Field] = []
-    for col in description:
-        # PEP-249: (name, type_code, display_size, internal_size, precision, scale, null_ok)
-        name = col[0] if len(col) > 0 else None
-        type_code = col[1] if len(col) > 1 else None
-        trino_type = _normalize_trino_type(type_code)
-        arrow_type = trino_type_to_arrow(trino_type)
-        fields.append(pa.field(str(name), arrow_type, nullable=True, metadata={"trino:type": trino_type}))
-    return pa.schema(fields)
+    if not os.path.isfile(value):
+        raise ValueError(f"{name} points to a non-existent file: {value}")
+    return value
 
 
 def main():
@@ -67,20 +38,23 @@ def main():
     port = 8080
     user = "trino-arrow-gateway-dbapi"
     http_scheme = "http"
+    verify = env_verify("TRINO_VERIFY", default=True)
+    sample_n = env_int("TRINO_SAMPLE_N", SAMPLE_N)
 
     print_section("Trino DB-API Request")
     print_kv("Endpoint", f"{http_scheme}://{host}:{port}")
     print_kv("User", user)
     print_kv("SQL", sql_text)
     print_kv("Fetch size", FETCH_SIZE)
-    sample_n = env_int("TRINO_SAMPLE_N", SAMPLE_N)
+    print_kv("Verify TLS", verify)
+    print_kv("Sample rows", sample_n)
 
     conn = connect(
         host=host,
         port=port,
         user=user,
         http_scheme=http_scheme,
-        verify=False,
+        verify=verify,
     )
 
     cursor = conn.cursor()
@@ -91,41 +65,25 @@ def main():
     cursor.execute(sql_text)
 
     rows = 0
-    columns = None
-    arrow_schema = arrow_schema_from_description(cursor.description)
-    if arrow_schema is not None:
-        print_kv("Arrow schema", schema_summary(arrow_schema))
-        columns = len(arrow_schema)
-
-    arrow_batches = 0
-    arrow_bytes = 0
+    columns = len(cursor.description) if cursor.description else None
+    if cursor.description:
+        print_kv("Schema", dbapi_schema_summary(cursor.description))
     last_report_at = 0
-    sample_batches: list[pa.RecordBatch] = []
-    sample_rows = 0
+    sample_rows: list[tuple] = []
 
     while True:
         batch = cursor.fetchmany()
         if not batch:
             break
 
-        # Build Arrow batches from the fetched DB-API rows (do not retain them; this is for benchmarking conversion).
-        if arrow_schema is not None:
-            cols = list(zip(*batch))
-            arrays: list[pa.Array] = []
-            for i, field in enumerate(arrow_schema):
-                arrays.append(pa.array(cols[i], type=field.type))
-            record_batch = pa.record_batch(arrays, schema=arrow_schema)
-            arrow_batches += 1
-            arrow_bytes += record_batch.nbytes
-            if sample_rows < sample_n:
-                need = sample_n - sample_rows
-                sample_batches.append(record_batch.slice(0, need))
-                sample_rows += min(need, record_batch.num_rows)
+        if sample_n > 0 and len(sample_rows) < sample_n:
+            remaining = sample_n - len(sample_rows)
+            sample_rows.extend(tuple(r) for r in batch[:remaining])
 
         rows += len(batch)
         if PROGRESS_EVERY > 0 and rows - last_report_at >= PROGRESS_EVERY:
             elapsed = time.perf_counter() - t0
-            print(f"- Progress: {rows} rows ({format_elapsed(elapsed)}), arrow_batches={arrow_batches}")
+            print(f"- Progress: {rows} rows ({format_elapsed(elapsed)})")
             last_report_at = rows
 
     cursor.close()
@@ -135,13 +93,10 @@ def main():
     print_section("Result Summary")
     print_kv("Rows", rows)
     print_kv("Columns", columns)
-    print_kv("Arrow batches", arrow_batches)
-    print_kv("Arrow bytes", arrow_bytes)
     print_kv("Elapsed", format_elapsed(t2 - t0))
-    if arrow_schema is not None and sample_batches:
-        print_section(f"Sample Data (first {sample_n} rows)")
-        sample_table = pa.Table.from_batches(sample_batches, schema=arrow_schema)
-        print_sample_rows(sample_table, limit=sample_n)
+    if sample_n > 0:
+        print_section(f"Sample Data (first {min(sample_n, len(sample_rows))} rows)")
+        print_sample_rows_dbapi(cursor.description, sample_rows, limit=sample_n)
 
 
 if __name__ == "__main__":
