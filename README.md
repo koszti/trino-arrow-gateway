@@ -13,11 +13,11 @@ Spring Boot service that submits queries to Trino, converts results to Apache Ar
 
 * Trino JDBC with the Spooling Protocol is the top performer, followed closely by the Trino CLI.
 * Trino Spooling Protocol is effectively **3x faster** than their non-spooled counterparts.
-* Trino Python Connector is **3x slower** than Java equivalents under the same spooling conditions.
-* Trino Python Connector with spooling protocol has very high RAM requirement often **leads to OOM and leaving the query abandoned** or never finishes
-* Trino-arrow-gateway provides performance boost **only for python users** and results near-java performance
-* Trino-arrow gateway doesn't give extra boost to java clients. JDBC implementation is efficient, fetching and process spooled files in parallel.
-* Additional performance boost from Arrow is only expected if it is implemented **natively within the Trino server**.
+* Trino Python DB-API is **3x slower** than Java equivalents under the same spooling conditions.
+* Trino Python DB-API with spooling can have high RAM usage and may **OOM, leaving queries abandoned** or never finishing.
+* Trino-arrow-gateway provides performance boost **only for python users** bringing them closer to java level performance.
+* Trino-arrow-gateway makes things slower than JDBC with spooling because it adds an extra hop and a JSON → Arrow conversion step that JDBC doesn’t need. JDBC fetches/acks spooled segments efficiently.
+* Arrow only helps if the producer is already columnar (no JSON→Arrow conversion). Significant additional gains are expected only with native Arrow support in Trino.
 
 See more benchmark details in [Benchmark Details](./benchmark/README.md).
 
