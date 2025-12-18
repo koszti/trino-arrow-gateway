@@ -19,13 +19,13 @@ python -m venv .venv
 Trino Arrow Gateway (Arrow Flight):
 
 ```bash
-.venv/bin/python flight_client_test.py "SELECT * FROM tpch.sf100.orders LIMIT 1_000_000"
+TRINO_VERIFY=false .venv/bin/python flight_client_test.py "SELECT * FROM tpch.sf100.orders LIMIT 1_000_000"
 ```
 
 Trino Python client (DB-API):
 
 ```bash
-.venv/bin/python dbapi_client_test.py "SELECT * FROM tpch.sf100.orders LIMIT 1_000_000"
+TRINO_VERIFY=false .venv/bin/python dbapi_client_test.py "SELECT * FROM tpch.sf100.orders LIMIT 1_000_000"
 ```
 
 ## Java (JDBC)
@@ -55,7 +55,7 @@ javac TrinoFlightBenchmark.java
 Run (you still need the Apache Arrow Flight jars on the classpath, `arrow-flight-core`, `arrow-vector`, `arrow-memory-core`, etc.):
 
 ```bash
-java -cp "TrinoFlightBenchmark.jar:/path/to/trino-server-*/lib/*" TrinoJdbTrinoFlightBenchmark "SELECT * FROM tpch.sf100.orders LIMIT 1_000_000"
+java -cp "TrinoFlightBenchmark.jar:/path/to/arrow-libs/*" TrinoJdbTrinoFlightBenchmark "SELECT * FROM tpch.sf100.orders LIMIT 1_000_000"
 ```
 
 ## Shell (Trino CLI)

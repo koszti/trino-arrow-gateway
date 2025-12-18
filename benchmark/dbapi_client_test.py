@@ -7,7 +7,7 @@ from trino.dbapi import connect
 from bench_utils import dbapi_schema_summary, env_int, format_elapsed, print_kv, print_sample_rows_dbapi, print_section
 
 EXAMPLE_SQL = "SELECT * FROM tpch.sf1.orders LIMIT 1000000"
-FETCH_SIZE = 1000
+FETCH_SIZE = 10000
 PROGRESS_EVERY = 100_000
 SAMPLE_N = 10
 

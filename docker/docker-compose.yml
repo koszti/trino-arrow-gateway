@@ -33,7 +33,7 @@ services:
     depends_on:
       - trino-coordinator
     deploy:
-      replicas: 3
+      replicas: 10
 
   minio:
     image: minio/minio:latest
