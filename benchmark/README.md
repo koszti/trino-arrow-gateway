@@ -2,10 +2,39 @@
 
 Commands below assume you run them from the `benchmark/` directory.
 
-Notes:
-- Benchmarks are run with a locally running MinIO to reduce network overhead as much as possible.
-- Full results will be added in a tabular format soon; current observations: enabling spooling is ~3x faster, and spooling + Arrow Gateway is ~6x faster.
+### Test System Configuration
 
+| Component        | Specification | Details                       |
+|------------------|---------------|-------------------------------|
+| CPU              | AMD 5800X     | 8 Cores / 16 Threads          |
+| Trino Workers    | 10 Nodes      | distributed trino cluster     |
+| SQL Query        | SELECT *      | tpch.sf100.orders LIMIT {n}   |
+| Spooling backend | minio         | to minimise network overhead  |
+
+### End-to-End Fetch Benchmarks
+
+Values represent the total time (in seconds) from query submission until the last row is received by the client.
+
+| Protocol                 | Client / Method    | 1M Rows | 10M Rows | 100M Rows |
+|--------------------------|--------------------|---------|----------|-----------|
+| Non-Spooled              | Trino CLI          | 10      | 74       | 699       |
+|                          | Trino JDBC         | 9       | 72       | 668       |
+|                          | Trino Python DBAPI | 12      | 112      | 1067      |
+| Spooling                 | Trino CLI          | 6       | 25       | 220       |
+|                          | Trino JDBC         | 5       | 23       | 201       |
+|                          | Trino Python DBAPI | 8       | 69       | 691       |
+| Spooling + Arrow Gateway | Flight (Java)      | 6       | 39       | 388       |
+|                          | Flight (Python)    | 7       | 40       | 401       |
+
+
+Trino python connector with spooling protocol raised multiple issues:
+* High RAM requirement
+* Without sufficient memory, it ends up with OOM in the client side, causing queries to hang indefinitely or transition to an ABANDONED state.
+* TCP ephemeral port exhaustion. Because spooling fetches many small files in rapid succession, the client can quickly exhaust available network ports:
+  * Set `net.ipv4.ip_local_port_range` and `net.ipv4.tcp_tw_reuse` sysctl settings
+  * Reduce the total number of network requests by increasing the segment sizes in Trino coordinator `config.properties`. 
+  This forces Trino to generate fewer, larger files: `protocol.spooling.initial-segment-size` `protocol.spooling.max-segment-size`
+  
 ## Python (Flight + DB-API)
 
 Create a virtualenv and install requirements (run once):

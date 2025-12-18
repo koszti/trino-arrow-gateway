@@ -2,6 +2,25 @@
 
 Spring Boot service that submits queries to Trino, converts results to Apache Arrow, and serves them over Arrow Flight.
 
+## Benchmarks and expectations
+
+> [!IMPORTANT]
+> **Project Context:** Trino does not currently support sending query results in Apache Arrow format. This repository serves as a benchmark
+> for a **JSON-to-Arrow gateway/converter** to measure potential throughput gains. Native Arrow support is on the Trino Roadmap and once delivered, 
+> the workarounds in this repo will be considered obsolete.
+
+![Trino Query UI](benchmark.png "Benchmark")
+
+* Trino JDBC with the Spooling Protocol is the top performer, followed closely by the Trino CLI.
+* Trino Spooling Protocol is effectively **3x faster** than their non-spooled counterparts.
+* Trino Python Connector is **3x slower** than Java equivalents under the same spooling conditions.
+* Trino Python Connector with spooling protocol has very high RAM requirement often **leads to OOM and leaving the query abandoned** or never finishes
+* Trino-arrow-gateway provides performance boost **only for python users** and results near-java performance
+* Trino-arrow gateway doesn't give extra boost to java clients. JDBC implementation is efficient, fetching and process spooled files in parallel.
+* Additional performance boost from Arrow is only expected if it is implemented **natively within the Trino server**.
+
+See more benchmark details in [Benchmark Details](./benchmark/README.md).
+
 ## Features
 
 - REST/Flight gateway for Trino query results.
